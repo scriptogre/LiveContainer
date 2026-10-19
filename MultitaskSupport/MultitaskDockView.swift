@@ -709,7 +709,11 @@ class AppInfoProvider {
             self.apps.append(appModel)
             
             if self.apps.count == 1 {
+                // Start collapsed and tucked away; collapsing also hides the window bar.
+                self.isCollapsed = true
+                self.isDockHidden = true
                 self.showDock()
+                self.notifyDockCollapseChanged()
             } else if self.isVisible {
                 self.updateDockFrame()
             }
@@ -867,7 +871,7 @@ public struct MultitaskDockSwiftView: View {
                 }
             }
             .scaleEffect(dockManager.isVisible ? 1.0 : 0.8)
-            .opacity(dockManager.isDockHidden ? (hideCollapsedDock && dockManager.isCollapsed ? 0.01 : 0.4) : 1.0)
+            .opacity(dockManager.isDockHidden ? (dockManager.isCollapsed ? 0.01 : 0.4) : 1.0)
             .offset(dragOffset)
             .position(x: g.size.width / 2, y: g.size.height / 2)
         }

@@ -26,7 +26,8 @@
     
     _dataUUID = dataUUID;
     _scaleRatio = 1.0;
-    _isMaximized = [NSUserDefaults.lcUserDefaults boolForKey:@"LCLaunchMultitaskMaximized"];
+    // Always open full screen so the guest app feels native.
+    _isMaximized = YES;
     _appSceneVC = [[AppSceneViewController alloc] initWithBundleId:bundleId dataUUID:dataUUID delegate:self];
     self.title = windowName;
     [self setupDecoratedView];
