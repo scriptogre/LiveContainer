@@ -47,6 +47,9 @@ static PiPManager* sharedInstance = nil;
 }
 
 - (instancetype)init {
+    [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationWillResignActiveNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
+        self.warmingUp = NO;
+    }];
     NSError* error = nil;
     [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback error:&error];
     [[AVAudioSession sharedInstance] setActive:YES withOptions:1 error:&error];
@@ -62,7 +65,25 @@ static PiPManager* sharedInstance = nil;
     if(self.pipController.isPictureInPictureActive) return;
     // Start and immediately stop PiP once; afterwards iOS auto-starts it on leaving the app.
     self.warmingUp = YES;
-    [self setUpPiPWithVC:vc start:YES];
+    self.warmUpAttempts = 0;
+    [self setUpPiPWithVC:vc start:NO];
+    [self startWarmUpWhenPossible];
+}
+
+// Starting PiP before iOS reports it possible silently does nothing, so wait for it.
+- (void)startWarmUpWhenPossible {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if(!self.warmingUp) return;
+        if(UIApplication.sharedApplication.applicationState != UIApplicationStateActive || self.warmUpAttempts++ > 40) {
+            self.warmingUp = NO;
+            return;
+        }
+        if(self.pipController.isPictureInPicturePossible) {
+            [self.pipController startPictureInPicture];
+        } else {
+            [self startWarmUpWhenPossible];
+        }
+    });
 }
 
 - (void)setUpPiPWithVC:(AppSceneViewController*)vc start:(BOOL)start {
@@ -156,16 +177,7 @@ static PiPManager* sharedInstance = nil;
 
 - (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController failedToStartPictureInPictureWithError:(NSError *)error {
     NSLog(@"%@", error.description);
-    // Warm-up can fail while the window is still loading; retry so the first swipe home works.
-    if(self.warmingUp) {
-        self.warmingUp = NO;
-        AppSceneViewController *vc = self.displayingVC;
-        if(vc && self.warmUpAttempts++ < 10) {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                if(vc.isAppRunning) [self preparePiPWithVC:vc];
-            });
-        }
-    }
+    if(self.warmingUp) [self startWarmUpWhenPossible];
 }
 
 - (void)observeValueForKeyPath:(NSString*)keyPath ofObject:(NSObject*)object change:(NSDictionary<NSString *,id> *) change context:(void *) context {
