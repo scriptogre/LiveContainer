@@ -16,6 +16,7 @@ API_AVAILABLE(ios(16.0))
 @property(nonatomic, strong) AVPictureInPictureController *pipController;
 @property(nonatomic) AppSceneViewController* displayingVC;
 @property(nonatomic) BOOL warmingUp;
+@property(nonatomic) int warmUpAttempts;
 @end
 
 
@@ -124,8 +125,12 @@ static PiPManager* sharedInstance = nil;
 - (void)pictureInPictureControllerDidStartPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
     if(self.warmingUp) {
         self.warmingUp = NO;
+        // If the user already left the app, this is the real PiP; keep it.
+        if(UIApplication.sharedApplication.applicationState != UIApplicationStateActive) return;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self.pipController stopPictureInPicture];
+            if(UIApplication.sharedApplication.applicationState == UIApplicationStateActive) {
+                [self.pipController stopPictureInPicture];
+            }
         });
     }
 }
@@ -151,6 +156,16 @@ static PiPManager* sharedInstance = nil;
 
 - (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController failedToStartPictureInPictureWithError:(NSError *)error {
     NSLog(@"%@", error.description);
+    // Warm-up can fail while the window is still loading; retry so the first swipe home works.
+    if(self.warmingUp) {
+        self.warmingUp = NO;
+        AppSceneViewController *vc = self.displayingVC;
+        if(vc && self.warmUpAttempts++ < 10) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                if(vc.isAppRunning) [self preparePiPWithVC:vc];
+            });
+        }
+    }
 }
 
 - (void)observeValueForKeyPath:(NSString*)keyPath ofObject:(NSObject*)object change:(NSDictionary<NSString *,id> *) change context:(void *) context {
