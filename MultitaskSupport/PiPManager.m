@@ -52,6 +52,16 @@ static PiPManager* sharedInstance = nil;
 }
 
 - (void)startPiPWithVC:(AppSceneViewController*)vc {
+    [self setUpPiPWithVC:vc start:YES];
+}
+
+// Arm PiP without starting it, so leaving the app starts PiP automatically.
+- (void)preparePiPWithVC:(AppSceneViewController*)vc {
+    if(self.pipController.isPictureInPictureActive) return;
+    [self setUpPiPWithVC:vc start:NO];
+}
+
+- (void)setUpPiPWithVC:(AppSceneViewController*)vc start:(BOOL)start {
     [self.pipController stopPictureInPicture];
     if(self.displayingVC) {
         [self.displayingDecoratedVC unminimizeWindowPiP];
@@ -76,7 +86,7 @@ static PiPManager* sharedInstance = nil;
         self.pipController.delegate = self;
         [self.pipController setValue:@1 forKey:@"controlsStyle"];
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self.pipController startPictureInPicture];
+            if(start) [self.pipController startPictureInPicture];
         });
     });
 
