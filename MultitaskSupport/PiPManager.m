@@ -15,6 +15,7 @@ API_AVAILABLE(ios(16.0))
 @property(nonatomic, strong) AVPictureInPictureVideoCallViewController *pipVideoCallViewController;
 @property(nonatomic, strong) AVPictureInPictureController *pipController;
 @property(nonatomic) AppSceneViewController* displayingVC;
+@property(nonatomic) BOOL warmingUp;
 @end
 
 
@@ -58,7 +59,9 @@ static PiPManager* sharedInstance = nil;
 // Arm PiP without starting it, so leaving the app starts PiP automatically.
 - (void)preparePiPWithVC:(AppSceneViewController*)vc {
     if(self.pipController.isPictureInPictureActive) return;
-    [self setUpPiPWithVC:vc start:NO];
+    // Start and immediately stop PiP once; afterwards iOS auto-starts it on leaving the app.
+    self.warmingUp = YES;
+    [self setUpPiPWithVC:vc start:YES];
 }
 
 - (void)setUpPiPWithVC:(AppSceneViewController*)vc start:(BOOL)start {
@@ -119,7 +122,12 @@ static PiPManager* sharedInstance = nil;
 
 
 - (void)pictureInPictureControllerDidStartPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
-    
+    if(self.warmingUp) {
+        self.warmingUp = NO;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self.pipController stopPictureInPicture];
+        });
+    }
 }
 
 - (void)pictureInPictureControllerWillStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
