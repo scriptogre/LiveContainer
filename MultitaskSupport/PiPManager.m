@@ -17,6 +17,7 @@ API_AVAILABLE(ios(16.0))
 @property(nonatomic) AppSceneViewController* displayingVC;
 @property(nonatomic) BOOL warmingUp;
 @property(nonatomic) int warmUpAttempts;
+@property(nonatomic, strong) AVAudioEngine *keepAliveEngine;
 @end
 
 
@@ -51,9 +52,36 @@ static PiPManager* sharedInstance = nil;
         self.warmingUp = NO;
     }];
     NSError* error = nil;
-    [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback error:&error];
+    // Mix with other audio so music and navigation voice keep playing.
+    [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:&error];
     [[AVAudioSession sharedInstance] setActive:YES withOptions:1 error:&error];
     return self;
+}
+
+// iOS suspends LiveContainer in the background unless it plays audio, which freezes the PiP picture.
+- (void)startKeepAlive {
+    if(self.keepAliveEngine.isRunning) return;
+    AVAudioEngine *engine = [AVAudioEngine new];
+    AVAudioPlayerNode *player = [AVAudioPlayerNode new];
+    AVAudioFormat *format = [[AVAudioFormat alloc] initStandardFormatWithSampleRate:44100 channels:1];
+    AVAudioPCMBuffer *buffer = [[AVAudioPCMBuffer alloc] initWithPCMFormat:format frameCapacity:44100];
+    buffer.frameLength = 44100;
+    [engine attachNode:player];
+    [engine connect:player to:engine.mainMixerNode format:format];
+    NSError *error = nil;
+    [[AVAudioSession sharedInstance] setActive:YES error:&error];
+    if(![engine startAndReturnError:&error]) {
+        NSLog(@"PiP keep-alive failed: %@", error);
+        return;
+    }
+    [player scheduleBuffer:buffer atTime:nil options:AVAudioPlayerNodeBufferLoops completionHandler:nil];
+    [player play];
+    self.keepAliveEngine = engine;
+}
+
+- (void)stopKeepAlive {
+    [self.keepAliveEngine stop];
+    self.keepAliveEngine = nil;
 }
 
 - (void)startPiPWithVC:(AppSceneViewController*)vc {
@@ -139,6 +167,7 @@ static PiPManager* sharedInstance = nil;
     self.pipVideoCallViewController.preferredContentSize = self.displayingVC.view.bounds.size;
     [self.displayingVC setBackgroundNotificationEnabled:false];
     self.displayingVC.shouldIgnoreSceneUpdates = YES;
+    [self startKeepAlive];
 }
 
 
@@ -162,6 +191,7 @@ static PiPManager* sharedInstance = nil;
 }
 
 - (void)pictureInPictureControllerDidStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
+    [self stopKeepAlive];
     [self.displayingVC.view insertSubview:self.displayingVC.contentView atIndex:0];
     // While PiP stays armed, leaving the app auto-starts PiP after resign-active fires.
     // Keep background notes off so the guest app keeps rendering in PiP.
