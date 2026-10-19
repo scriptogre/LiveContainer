@@ -163,7 +163,10 @@ static PiPManager* sharedInstance = nil;
 
 - (void)pictureInPictureControllerDidStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
     [self.displayingVC.view insertSubview:self.displayingVC.contentView atIndex:0];
-    [self.displayingVC setBackgroundNotificationEnabled:true];
+    // While PiP stays armed, leaving the app auto-starts PiP after resign-active fires.
+    // Keep background notes off so the guest app keeps rendering in PiP.
+    BOOL armed = self.pipController.canStartPictureInPictureAutomaticallyFromInline && ![NSUserDefaults.lcSharedDefaults boolForKey:@"LCAutoEndPiP"];
+    [self.displayingVC setBackgroundNotificationEnabled:!armed];
     // resize if needed (eg orientation differs)
     [self.displayingDecoratedVC updateVerticalConstraints];
     
