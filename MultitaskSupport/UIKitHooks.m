@@ -7,6 +7,7 @@
 @import ObjectiveC;
 #import "utils.h"
 #import "UIKitPrivate+MultitaskSupport.h"
+#import "PiPManager.h"
 
 static BOOL LCHasRemoteSheetProviderSelector;
 
@@ -47,6 +48,14 @@ void hook_FBScene_performUpdateWithoutActivation(FBScene* self, SEL _cmd, void (
     _UISceneHostingView *view = controller.sceneView;
     id wrappedBlock = ^(UIMutableApplicationSceneSettings *settings, FBSSceneTransitionContext *context) {
         updateBlock(settings, context);
+        // While PiP shows the guest app, the host is in the background and UIKit marks the hosted
+        // scene background too, so the guest stops drawing. Keep it foreground and active.
+        if(PiPManager.shared.isPiP) {
+            settings.foreground = YES;
+            if([settings respondsToSelector:@selector(setDeactivationReasons:)]) {
+                [settings setValue:@0 forKey:@"deactivationReasons"];
+            }
+        }
         CGAffineTransform transform = view.transform;
         UIEdgeInsets orig = view.superview.safeAreaInsets;
         if(LCHasRemoteSheetProviderSelector && UIInterfaceOrientationIsLandscape(settings.interfaceOrientation)) {
